@@ -1,7 +1,7 @@
-// 1. Load your shapefile (Ensure it is named 'roi' in your imports)
-var roi = table; 
+// 1. Load your shapefile (Ensure it is named 'table' or 'roi' in your imports)
+var roi = table; // Assumes your import is named 'table'
 
-// 2. Scaling Function (Standard for Landsat Collection 2)
+// 2. Scaling Function 
 function applyScaleFactors(image) {
   var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
   var thermalBands = image.select('ST_B6').multiply(0.00341802).add(149.0);
@@ -9,8 +9,7 @@ function applyScaleFactors(image) {
               .addBands(thermalBands, null, true);
 }
 
-// 3. Load Landsat 5 Surface Reflectance Tier 1 data
-// We use Landsat 5 for 2005 to avoid the "Scan Line" stripes found in Landsat 7
+// 3. Load Landsat 5
 var landsat2005 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
   .filterBounds(roi)
   .filterDate('2005-01-01', '2005-12-31')
@@ -18,9 +17,10 @@ var landsat2005 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
   .map(applyScaleFactors);
 
 // 4. Create Median Composite
+// Use .clipToCollection if 'roi' is a FeatureCollection with multiple polygons
 var composite2005 = landsat2005.median().clip(roi);
 
-// 5. Visualization Parameters
+// 5. Visualization
 var visParams = {
   bands: ['SR_B3', 'SR_B2', 'SR_B1'],
   min: 0,
@@ -31,12 +31,15 @@ Map.centerObject(roi, 10);
 Map.addLayer(composite2005, visParams, 'Landsat 5 - 2005');
 
 // 6. EXPORT TO DRIVE
+// Define the export region explicitly to avoid geometry errors
+var exportRegion = roi.geometry().bounds(); 
+
 Export.image.toDrive({
-  image: composite2005.select(['SR_B3', 'SR_B2', 'SR_B1', 'SR_B4', 'SR_B5', 'SR_B7']),
+  image: composite2005.select(['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7']),
   description: 'Landsat_2005_Export',
   folder: 'GEE_Exports',
   fileNamePrefix: 'landsat_2005_composite',
-  region: roi.geometry().bounds(),
+  region: exportRegion, // Use the pre-defined bounds
   scale: 30,
   maxPixels: 1e13,
   fileFormat: 'GeoTIFF'
