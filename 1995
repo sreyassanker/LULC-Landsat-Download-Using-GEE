@@ -1,0 +1,41 @@
+// 1. Load your shapefile (Ensure you have imported your asset and named it 'roi')
+var roi = table; // 'table' is the default name when you upload a shapefile
+
+// 2. Load Landsat 5 Surface Reflectance Tier 1 data
+// We apply a scaling factor because Collection 2 data is stored as integers to save space
+function applyScaleFactors(image) {
+  var opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2);
+  var thermalBands = image.select('ST_B6').multiply(0.00341802).add(149.0);
+  return image.addBands(opticalBands, null, true)
+              .addBands(thermalBands, null, true);
+}
+
+var landsat1995 = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+  .filterBounds(roi)
+  .filterDate('1995-01-01', '1995-12-31')
+  .filter(ee.Filter.lt('CLOUD_COVER', 5))
+  .map(applyScaleFactors);
+
+// 3. Create a Median Composite and Clip to your ROI
+var composite = landsat1995.median().clip(roi);
+
+// 4. Visualization (Natural Color)
+var visParams = {
+  bands: ['SR_B3', 'SR_B2', 'SR_B1'],
+  min: 0,
+  max: 0.3
+};
+Map.centerObject(roi, 10);
+Map.addLayer(composite, visParams, 'Landsat 5 1995');
+
+// 5. EXPORT TO GOOGLE DRIVE
+Export.image.toDrive({
+  image: composite.select(['SR_B3', 'SR_B2', 'SR_B1', 'SR_B4', 'SR_B5', 'SR_B7']), // Includes NIR and SWIR bands
+  description: 'Landsat_1995_Export',
+  folder: 'GEE_Exports', // The folder name in your Google Drive
+  fileNamePrefix: 'landsat_1995_composite',
+  region: roi.geometry().bounds(), // Using bounds ensures a rectangular export valid for GIS
+  scale: 30, // Landsat resolution is 30 meters
+  maxPixels: 1e13,
+  fileFormat: 'GeoTIFF'
+});
